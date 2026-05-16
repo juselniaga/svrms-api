@@ -17,6 +17,7 @@ app.get('/v1/health', (req, res) => {
 // Import Routes (To be created)
 app.use('/v1/auth', require('./routes/auth.routes'));
 app.use('/v1/todo', require('./routes/todo.routes'));
+app.use('/v1/applications', require('./routes/applications.routes'));
 app.use('/v1/sites', require('./routes/sites.routes'));
 app.use('/v1/site-visits', require('./routes/siteVisits.routes'));
 app.use('/v1/reviews', require('./routes/reviews.routes'));
