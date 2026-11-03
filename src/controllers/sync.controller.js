@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { setApplicationStatus } = require('../utils/applicationStatus');
 
 exports.syncOfflineData = async (req, res, next) => {
   try {
@@ -25,7 +26,6 @@ exports.syncOfflineData = async (req, res, next) => {
             [p.application_id, p.mukim, p.bpk, p.luas, p.nofail, p.lot, p.kategori_tanah, p.status_tanah, p.lokasi]
           );
           server_id = insertRes.insertId;
-          await conn.execute(`UPDATE applications SET status = 'site_visit' WHERE application_id = ?`, [p.application_id]);
         } 
         else if (record.type === 'site_visit') {
           const [insertRes] = await conn.execute(
@@ -34,16 +34,16 @@ exports.syncOfflineData = async (req, res, next) => {
           );
           server_id = insertRes.insertId;
           if (p.action === 'submit') {
-            await conn.execute(`UPDATE applications SET status = 'review' WHERE application_id = ?`, [p.application_id]);
+            await setApplicationStatus(conn, p.application_id, 'SITE_VISIT_IN_PROGRESS');
           }
         } 
         else if (record.type === 'review') {
           const [insertRes] = await conn.execute(
-            `INSERT INTO reviews (application_id, officer_id, review_content, recommendation, self_check_completed) VALUES (?, ?, ?, ?, ?)`,
+            `INSERT INTO reviews (application_id, officer_id, review_content, recommendation, self_check_completed, submitted_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW(), NOW())`,
             [p.application_id, p.officer_id, p.review_content, p.recommendation, p.self_check_completed]
           );
           server_id = insertRes.insertId;
-          await conn.execute(`UPDATE applications SET status = 'verified' WHERE application_id = ?`, [p.application_id]);
+          await setApplicationStatus(conn, p.application_id, 'PENDING_VERIFICATION');
         } 
         else {
           throw new Error('Unknown record type');

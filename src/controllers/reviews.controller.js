@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { setApplicationStatus } = require('../utils/applicationStatus');
 
 exports.submitReview = async (req, res, next) => {
   const conn = await pool.getConnection();
@@ -14,10 +15,7 @@ exports.submitReview = async (req, res, next) => {
     );
 
     // Update application status
-    await conn.execute(
-      `UPDATE applications SET status = 'PENDING_VERIFICATION' WHERE application_id = ?`,
-      [application_id]
-    );
+    await setApplicationStatus(conn, application_id, 'PENDING_VERIFICATION');
 
     await conn.commit();
     res.status(201).json({
