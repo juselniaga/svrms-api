@@ -1,5 +1,7 @@
 const pool = require('../config/db');
 const { setApplicationStatus } = require('../utils/applicationStatus');
+const { getOwnedApplication, assertStatus } = require('../utils/access');
+const { reviewSchema, parse } = require('../utils/schemas');
 
 exports.syncOfflineData = async (req, res, next) => {
   try {
@@ -20,6 +22,8 @@ exports.syncOfflineData = async (req, res, next) => {
         const p = record.payload;
         let server_id = null;
 
+        const application = await getOwnedApplication(conn, p?.application_id ?? null, req.user, { lock: true });
+
         if (record.type === 'site') {
           const [insertRes] = await conn.execute(
             `INSERT INTO sites (application_id, mukim, bpk, luas, nofail, lot, kategori_tanah, status_tanah, lokasi) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -30,7 +34,7 @@ exports.syncOfflineData = async (req, res, next) => {
         else if (record.type === 'site_visit') {
           const [insertRes] = await conn.execute(
             `INSERT INTO site_visits (application_id, officer_id) VALUES (?, ?)`,
-            [p.application_id, p.officer_id]
+            [p.application_id, req.user.user_id]
           );
           server_id = insertRes.insertId;
           if (p.action === 'submit') {
@@ -38,9 +42,11 @@ exports.syncOfflineData = async (req, res, next) => {
           }
         } 
         else if (record.type === 'review') {
+          const review = parse(reviewSchema, p);
+          assertStatus(application, ['SITE_VISIT_IN_PROGRESS']);
           const [insertRes] = await conn.execute(
             `INSERT INTO reviews (application_id, officer_id, review_content, recommendation, self_check_completed, submitted_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW(), NOW())`,
-            [p.application_id, p.officer_id, p.review_content, p.recommendation, p.self_check_completed]
+            [review.application_id, req.user.user_id, review.review_content, review.recommendation, review.self_check_completed]
           );
           server_id = insertRes.insertId;
           await setApplicationStatus(conn, p.application_id, 'PENDING_VERIFICATION');
@@ -55,7 +61,8 @@ exports.syncOfflineData = async (req, res, next) => {
       } catch (err) {
         await conn.rollback();
         failed++;
-        results.push({ local_id: record.local_id, status: 'failed', server_id: null, error: err.message });
+        if (!err.status) console.error(err);
+        results.push({ local_id: record.local_id, status: 'failed', server_id: null, error: err.status ? err.message : 'Rekod tidak dapat disimpan.' });
       } finally {
         conn.release();
       }

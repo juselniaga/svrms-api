@@ -20,8 +20,9 @@ exports.getApplicationById = async (req, res, next) => {
        FROM applications a
        LEFT JOIN developers d ON a.developer_id = d.developer_id
        WHERE a.application_id = ?
+         AND a.officer_id = ?
          AND a.is_active = 1`,
-      [application_id]
+      [application_id, req.user.user_id]
     );
 
     if (rows.length === 0) {
