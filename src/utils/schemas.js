@@ -7,6 +7,7 @@ const shortText = z.string().max(255);
 const siteSchema = z.object({
   application_id: applicationId,
   mukim: shortText.min(1),
+  bp: shortText.min(1),
   bpk: shortText.optional(),
   lot: shortText.min(1),
   kategori_tanah: shortText.min(1),
