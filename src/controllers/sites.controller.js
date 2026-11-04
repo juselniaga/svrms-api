@@ -3,10 +3,22 @@ const { getOwnedApplication, assertStatus, httpError } = require('../utils/acces
 const { siteSchema, parse } = require('../utils/schemas');
 const { writeAuditLog } = require('../utils/auditLog');
 
+// Laravel resolves these values against its reference tables to show their names
+const assertValidReferences = async (conn, { mukim, bp, bpk }) => {
+  const [[mukimRow]] = await conn.execute('SELECT 1 FROM mukims WHERE mukim_no = ? AND status = 1', [mukim]);
+  const [[bpRow]] = await conn.execute('SELECT 1 FROM b_p_s WHERE id = ? AND status = 1', [bp]);
+  const [[bpkRow]] = bpk
+    ? await conn.execute('SELECT 1 FROM b_p_k_s WHERE id = ? AND bp_id = ? AND status = 1', [bpk, bp])
+    : [[true]];
+  if (!mukimRow || !bpRow || !bpkRow) {
+    throw httpError(400, 'INVALID_REFERENCE', 'Mukim, BP atau BPK tidak sah. Sila pilih semula.');
+  }
+};
+
 exports.createSite = async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
-    const { application_id, mukim, bpk, luas, lot, lembaran, kategori_tanah, status_tanah, google_lat } = parse(siteSchema, req.body);
+    const { application_id, mukim, bp, bpk, luas, lot, lembaran, kategori_tanah, status_tanah, google_lat } = parse(siteSchema, req.body);
 
     await conn.beginTransaction();
     const application = await getOwnedApplication(conn, application_id, req.user, { lock: true });
@@ -17,11 +29,13 @@ exports.createSite = async (req, res, next) => {
       throw httpError(422, 'DUPLICATE_SITE', 'Tapak bagi permohonan ini sudah didaftarkan.');
     }
 
+    await assertValidReferences(conn, { mukim, bp, bpk });
+
     // Insert into sites
     const [result] = await conn.execute(
-      `INSERT INTO sites (application_id, mukim, bpk, luas, lot, lembaran, kategori_tanah, status_tanah, google_lat, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'REGISTERED', NOW(), NOW())`,
-      [application_id, mukim, bpk ?? null, luas, lot, lembaran, kategori_tanah, status_tanah, google_lat ?? null]
+      `INSERT INTO sites (application_id, mukim, bp, bpk, luas, lot, lembaran, kategori_tanah, status_tanah, google_lat, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'REGISTERED', NOW(), NOW())`,
+      [application_id, mukim, bp, bpk || null, luas, lot, lembaran, kategori_tanah, status_tanah, google_lat ?? null]
     );
 
     await writeAuditLog(conn, {
