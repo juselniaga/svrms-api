@@ -13,6 +13,13 @@ if (!fs.existsSync(storagePath)) {
   fs.mkdirSync(storagePath, { recursive: true });
 }
 
+const ALLOWED_TYPES = {
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp'
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     // Store flat in photos/ — matches Laravel's storage convention
@@ -20,7 +27,9 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const filename = file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname);
+    // Extension comes from the checked type, never the client's filename: this folder is
+    // served by Apache, so a name like x.php would run as code
+    const filename = file.fieldname + '-' + uniqueSuffix + ALLOWED_TYPES[file.mimetype];
 
     // Attach relative path so controller stores 'photos/filename' in DB
     // (compatible with Laravel's Storage::url('photos/filename'))
@@ -31,11 +40,10 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedMimes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
-  if (allowedMimes.includes(file.mimetype)) {
+  if (Object.hasOwn(ALLOWED_TYPES, file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only JPEG, PNG, JPG and WebP are allowed.'), false);
+    cb(Object.assign(new Error('Invalid file type. Only JPEG, PNG, JPG and WebP are allowed.'), { status: 400, code: 'INVALID_FILE_TYPE' }), false);
   }
 };
 

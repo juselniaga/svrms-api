@@ -5,7 +5,8 @@ require('dotenv').config();
 const app = express();
 
 // Middleware
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+// The PWA reaches this API same-origin through its proxy, so no cross-origin access by default
+app.use(cors({ origin: process.env.CORS_ORIGIN || false }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -25,10 +26,14 @@ app.use('/v1/sync', require('./routes/sync.routes'));
 
 // Global Error Handler
 app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error. Please try again later.',
-    code: err.code || 'INTERNAL_ERROR',
+  // Multer's own errors (e.g. file too large) are the client's to fix
+  const status = err.status || (err.name === 'MulterError' ? 400 : 500);
+  if (status >= 500) console.error(err);
+
+  // Unexpected errors can carry SQL or file paths, so their details stay in the log
+  res.status(status).json({
+    error: status < 500 ? err.message : 'Internal server error. Please try again later.',
+    code: status < 500 ? err.code : 'INTERNAL_ERROR',
     details: err.details || null
   });
 });
